@@ -9,16 +9,19 @@ import javafx.scene.control.ButtonType;
 
 import org.jabref.gui.DialogService;
 import org.jabref.gui.LibraryTab;
+import org.jabref.gui.StateManager;
 import org.jabref.gui.autosaveandbackup.BackupManager;
 import org.jabref.gui.backup.BackupResolverDialog;
 import org.jabref.gui.collab.DatabaseChange;
 import org.jabref.gui.collab.DatabaseChangeList;
 import org.jabref.gui.collab.DatabaseChangeResolverFactory;
 import org.jabref.gui.collab.DatabaseChangesResolverDialog;
+import org.jabref.gui.undo.NamedCompound;
 import org.jabref.gui.util.DefaultTaskExecutor;
 import org.jabref.logic.importer.ImportFormatPreferences;
 import org.jabref.logic.importer.OpenDatabase;
 import org.jabref.logic.importer.ParserResult;
+import org.jabref.logic.l10n.Localization;
 import org.jabref.logic.util.BackupFileType;
 import org.jabref.logic.util.io.BackupFileUtil;
 import org.jabref.model.database.BibDatabaseContext;
@@ -30,11 +33,15 @@ import org.jabref.preferences.PreferencesService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.jabref.gui.Globals.undoManager;
+
 /**
  * Stores all user dialogs related to {@link BackupManager}.
  */
 public class BackupUIManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(BackupUIManager.class);
+
+    private static final NamedCompound ce = new NamedCompound(Localization.lang("Merged external changes"));
 
     private BackupUIManager() {
     }
@@ -43,7 +50,7 @@ public class BackupUIManager {
                                                                  Path originalPath,
                                                                  PreferencesService preferencesService,
                                                                  FileUpdateMonitor fileUpdateMonitor,
-                                                                 LibraryTab libraryTab) {
+                                                                 StateManager stateManager) {
         var actionOpt = showBackupResolverDialog(
                 dialogService,
                 preferencesService.getExternalApplicationsPreferences(),
@@ -54,7 +61,7 @@ public class BackupUIManager {
                 BackupManager.restoreBackup(originalPath, preferencesService.getFilePreferences().getBackupDirectory());
                 return Optional.empty();
             } else if (action == BackupResolverDialog.REVIEW_BACKUP) {
-                return showReviewBackupDialog(dialogService, originalPath, preferencesService, fileUpdateMonitor, libraryTab);
+                return showReviewBackupDialog(dialogService, originalPath, preferencesService, fileUpdateMonitor, stateManager);
             }
             return Optional.empty();
         });
@@ -73,7 +80,7 @@ public class BackupUIManager {
             Path originalPath,
             PreferencesService preferencesService,
             FileUpdateMonitor fileUpdateMonitor,
-            LibraryTab libraryTab) {
+            StateManager stateManager) {
         try {
             ImportFormatPreferences importFormatPreferences = preferencesService.getImportFormatPreferences();
 
@@ -95,13 +102,24 @@ public class BackupUIManager {
                         libraryTab
                 );
                 var allChangesResolved = dialogService.showCustomDialogAndWait(reviewBackupDialog);
-                if (allChangesResolved.isEmpty() || !allChangesResolved.get()) {
-                    // In case not all changes are resolved, start from scratch
-                    return showRestoreBackupDialog(dialogService, originalPath, preferencesService, fileUpdateMonitor, libraryTab);
+                // In case all changes of the file on disk are merged into the current in-memory file, the file on disk does not differ from the in-memory file
+                LibraryTab saveState = stateManager.activeTabProperty().get().get();
+                final NamedCompound ce = new NamedCompound(Localization.lang("Merged external changes"));
+                changes.stream().filter(DatabaseChange::isAccepted).forEach(change -> change.applyChange(ce));
+                ce.end();
+                undoManager.addEdit(ce);
+                if (allChangesResolved.get()) {
+                    if (reviewBackupDialog.areAllChangesDenied()) {
+                        saveState.resetChangeMonitor();
+                    } else {
+                        saveState.markBaseChanged();
+                    }
+                    // This does NOT return the original ParserResult, but a modified version with all changes accepted or rejected
+                    return Optional.of(originalParserResult);
                 }
 
-                // This does NOT return the original ParserResult, but a modified version with all changes accepted or rejected
-                return Optional.of(originalParserResult);
+                // In case not all changes are resolved, start from scratch
+                return showRestoreBackupDialog(dialogService, originalPath, preferencesService, fileUpdateMonitor, stateManager);
             });
         } catch (IOException e) {
             LOGGER.error("Error while loading backup or current database", e);

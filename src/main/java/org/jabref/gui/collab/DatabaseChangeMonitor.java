@@ -8,7 +8,9 @@ import javafx.util.Duration;
 
 import org.jabref.gui.DialogService;
 import org.jabref.gui.LibraryTab;
+import org.jabref.gui.StateManager;
 import org.jabref.gui.icon.IconTheme;
+import org.jabref.gui.undo.NamedCompound;
 import org.jabref.gui.util.BackgroundTask;
 import org.jabref.gui.util.TaskExecutor;
 import org.jabref.logic.l10n.Localization;
@@ -21,6 +23,8 @@ import org.controlsfx.control.action.Action;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.jabref.gui.Globals.undoManager;
+
 public class DatabaseChangeMonitor implements FileUpdateListener {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseChangeMonitor.class);
@@ -31,7 +35,7 @@ public class DatabaseChangeMonitor implements FileUpdateListener {
     private final TaskExecutor taskExecutor;
     private final DialogService dialogService;
     private final PreferencesService preferencesService;
-    private final LibraryTab libraryTab;
+    private LibraryTab saveState;
 
     public DatabaseChangeMonitor(BibDatabaseContext database,
                                  FileUpdateMonitor fileMonitor,
@@ -39,7 +43,7 @@ public class DatabaseChangeMonitor implements FileUpdateListener {
                                  DialogService dialogService,
                                  PreferencesService preferencesService,
                                  LibraryTab.DatabaseNotification notificationPane,
-                                 LibraryTab libraryTab) {
+                                 StateManager stateManager) {
         this.database = database;
         this.fileMonitor = fileMonitor;
         this.taskExecutor = taskExecutor;
@@ -62,7 +66,23 @@ public class DatabaseChangeMonitor implements FileUpdateListener {
                 Localization.lang("The library has been modified by another program."),
                 List.of(new Action(Localization.lang("Dismiss changes"), event -> notificationPane.hide()),
                         new Action(Localization.lang("Review changes"), event -> {
-                            dialogService.showCustomDialogAndWait(new DatabaseChangesResolverDialog(changes, database, Localization.lang("External Changes Resolver"),libraryTab));
+                            DatabaseChangesResolverDialog databaseChangesResolverDialog = new DatabaseChangesResolverDialog(changes, database, Localization.lang("External Changes Resolver"));
+                            var areAllChangesResolved = dialogService.showCustomDialogAndWait(databaseChangesResolverDialog);
+                            // Here the case of a backup file is handled. If no changes of the backup are merged in, the file stays the same
+                            // In case any change of the backup is accepted, this means, the in-memory file differs from the file on disk (which is not the backup file)
+                            boolean areAllChangesAccepted = databaseChangesResolverDialog.areAllChangesAccepted();
+                            saveState = stateManager.activeTabProperty().get().get();
+                            final NamedCompound ce = new NamedCompound(Localization.lang("Merged external changes"));
+                            changes.stream().filter(DatabaseChange::isAccepted).forEach(change -> change.applyChange(ce));
+                            ce.end();
+                            undoManager.addEdit(ce);
+                            if (areAllChangesResolved.get()) {
+                                if (areAllChangesAccepted) {
+                                    saveState.resetChangedProperties();
+                                } else {
+                                    saveState.markBaseChanged();
+                                }
+                            }
                             notificationPane.hide();
                         })),
                 Duration.ZERO));

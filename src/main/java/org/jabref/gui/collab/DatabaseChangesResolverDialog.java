@@ -56,6 +56,9 @@ public class DatabaseChangesResolverDialog extends BaseDialog<Boolean> {
     private ExternalChangesResolverViewModel viewModel;
     private final LibraryTab libraryTab;
 
+    private boolean areAllChangesAccepted;
+    private boolean areAllChangesDenied;
+
     @Inject private UndoManager undoManager;
     @Inject private StateManager stateManager;
     @Inject private DialogService dialogService;
@@ -92,6 +95,14 @@ public class DatabaseChangesResolverDialog extends BaseDialog<Boolean> {
         });
     }
 
+    public boolean areAllChangesAccepted() {
+        return areAllChangesAccepted;
+    }
+
+    public boolean areAllChangesDenied() {
+        return areAllChangesDenied;
+    }
+
     @FXML
     private void initialize() {
         PreviewViewer previewViewer = new PreviewViewer(database, dialogService, preferencesService, stateManager, themeManager, taskExecutor);
@@ -117,9 +128,8 @@ public class DatabaseChangesResolverDialog extends BaseDialog<Boolean> {
 
         EasyBind.subscribe(viewModel.areAllChangesResolvedProperty(), isResolved -> {
             if (isResolved) {
-                viewModel.applyChanges();
-                SaveDatabaseAction saveAction = new SaveDatabaseAction(libraryTab,dialogService,preferencesService,entryTypesManager);
-                saveAction.save();
+                areAllChangesAccepted = viewModel.areAllChangesAccepted();
+                areAllChangesDenied = viewModel.areAllChangesDenied();
                 close();
             }
         });
