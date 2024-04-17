@@ -98,7 +98,8 @@ public class BackupUIManager {
                 List<DatabaseChange> changes = DatabaseChangeList.compareAndGetChanges(originalDatabase, backupDatabase, changeResolverFactory);
                 DatabaseChangesResolverDialog reviewBackupDialog = new DatabaseChangesResolverDialog(
                         changes,
-                        originalDatabase, "Review Backup"
+                        originalDatabase, "Review Backup",
+                        libraryTab
                 );
                 var allChangesResolved = dialogService.showCustomDialogAndWait(reviewBackupDialog);
                 // In case all changes of the file on disk are merged into the current in-memory file, the file on disk does not differ from the in-memory file

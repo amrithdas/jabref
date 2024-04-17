@@ -49,6 +49,7 @@ public class DatabaseChangeMonitor implements FileUpdateListener {
         this.taskExecutor = taskExecutor;
         this.dialogService = dialogService;
         this.preferencesService = preferencesService;
+        this.libraryTab = libraryTab;
 
         this.listeners = new ArrayList<>();
 

@@ -15,7 +15,9 @@ import javafx.scene.control.TableView;
 import javafx.scene.layout.BorderPane;
 
 import org.jabref.gui.DialogService;
+import org.jabref.gui.LibraryTab;
 import org.jabref.gui.StateManager;
+import org.jabref.gui.exporter.SaveDatabaseAction;
 import org.jabref.gui.preview.PreviewViewer;
 import org.jabref.gui.theme.ThemeManager;
 import org.jabref.gui.util.BaseDialog;
@@ -52,6 +54,7 @@ public class DatabaseChangesResolverDialog extends BaseDialog<Boolean> {
     private final BibDatabaseContext database;
 
     private ExternalChangesResolverViewModel viewModel;
+    private final LibraryTab libraryTab;
 
     private boolean areAllChangesAccepted;
     private boolean areAllChangesDenied;
@@ -71,9 +74,10 @@ public class DatabaseChangesResolverDialog extends BaseDialog<Boolean> {
      * @param changes The list of changes
      * @param database The database to apply the changes to
      */
-    public DatabaseChangesResolverDialog(List<DatabaseChange> changes, BibDatabaseContext database, String dialogTitle) {
+    public DatabaseChangesResolverDialog(List<DatabaseChange> changes, BibDatabaseContext database, String dialogTitle,  LibraryTab libraryTab) {
         this.changes = changes;
         this.database = database;
+        this.libraryTab = libraryTab;
 
         this.setTitle(dialogTitle);
         ViewLoader.view(this)
